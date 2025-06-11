@@ -123,4 +123,4 @@ if uploaded_file:
             st.subheader("🧠 Answer")
             st.write(answer)
 else:
-    st.info("📁 Please upload a document to begin.") update pls
+    st.info("📁 Please upload a document to begin.")
