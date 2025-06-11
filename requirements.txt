@@ -1,4 +1,5 @@
-streamlit
+pandasstreamlit
 transformers
 PyMuPDF
 python-docx
+pandas
