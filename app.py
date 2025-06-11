@@ -1,35 +1,47 @@
 import streamlit as st
-import fitz  # PyMuPDF
+import pdfplumber
 import docx
 import pandas as pd
 import io
 import re
 from transformers import pipeline
 
-# Configure the Streamlit page
+# --- Page Setup ---
 st.set_page_config(page_title="Pre-Sales Assistant", layout="centered")
 
-# Load summarizer model only once
+# --- Load Summarizer Model ---
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
     return pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+    # For better results, you can use: "facebook/bart-large-cnn"
 
 summarizer = load_summarizer()
 
-# Clean spammy or irrelevant web text
+# --- Clean and Filter Junk Text ---
 def clean_text(text):
-    return re.sub(r'https?://\S+|www\.\S+|gallery\.com|iReport\.com', '', text)
+    lines = text.splitlines()
+    cleaned = []
+    seen = set()
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if line.lower() in seen:
+            continue
+        if any(bad in line.lower() for bad in ['cnn.com', 'gallery.com', 'ireport.com', 'visit', 'next week']):
+            continue
+        cleaned.append(line)
+        seen.add(line.lower())
+    return "\n".join(cleaned)
 
-# Extract text from supported file types
+# --- Extract Text from Upload ---
 def extract_text(file):
     if file.type == "application/pdf":
-        doc = fitz.open(stream=file.read(), filetype="pdf")
-        return "".join(page.get_text() for page in doc)
-
+        with pdfplumber.open(io.BytesIO(file.read())) as pdf:
+            return "\n".join(page.extract_text() or "" for page in pdf.pages)
     elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         doc = docx.Document(io.BytesIO(file.read()))
         return "\n".join(para.text for para in doc.paragraphs)
-
     elif file.type in ["application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]:
         xls = pd.ExcelFile(file)
         texts = []
@@ -37,32 +49,30 @@ def extract_text(file):
             df = xls.parse(sheet)
             texts.append(df.to_string(index=False))
         return "\n\n".join(texts)
-
     return ""
 
-# Split text into chunks of ~250 words
+# --- Split Text into Manageable Chunks ---
 def split_into_chunks(text, max_words=250):
-    paragraphs = text.split("\n\n")
+    sentences = re.split(r'(?<=[.!?]) +', text)
     chunks = []
-    current_chunk = []
+    current = []
 
-    for para in paragraphs:
-        words = para.strip().split()
+    for sentence in sentences:
+        words = sentence.strip().split()
         if not words:
             continue
-
-        if sum(len(p.split()) for p in current_chunk) + len(words) <= max_words:
-            current_chunk.append(para.strip())
+        if sum(len(s.split()) for s in current) + len(words) <= max_words:
+            current.append(sentence.strip())
         else:
-            chunks.append(" ".join(current_chunk).strip())
-            current_chunk = [para.strip()]
+            chunks.append(" ".join(current).strip())
+            current = [sentence.strip()]
 
-    if current_chunk:
-        chunks.append(" ".join(current_chunk).strip())
+    if current:
+        chunks.append(" ".join(current).strip())
 
     return chunks
 
-# Summarization pipeline
+# --- Summarize Text Chunks ---
 def generate_summary(text, fast_mode=False):
     chunks = split_into_chunks(text)
     if not chunks:
@@ -102,7 +112,7 @@ def generate_summary(text, fast_mode=False):
     except Exception:
         return combined
 
-# Question-answering helper
+# --- Simple Q&A via Keyword Matching ---
 def find_answer(question, text_chunks):
     question_words = set(re.findall(r'\w+', question.lower()))
     best_chunk = None
@@ -115,9 +125,9 @@ def find_answer(question, text_chunks):
             max_matches = len(common_words)
             best_chunk = chunk
 
-    return best_chunk or "Sorry, I couldn't find the answer in the document."
+    return best_chunk or "❌ Sorry, I couldn't find the answer in the document."
 
-# App UI
+# --- UI ---
 st.title("🤖 Pre-Sales Assistant")
 
 uploaded_file = st.file_uploader("📄 Upload a document (PDF, DOCX, XLSX)", type=['pdf', 'docx', 'xls', 'xlsx'])
@@ -130,7 +140,7 @@ if uploaded_file:
         st.warning("⚠️ The document appears too short or empty to summarize.")
     else:
         with st.expander("🔍 Preview Extracted Text"):
-            st.write(full_text[:2000] + "..." if len(full_text) > 2000 else full_text)
+            st.text_area("Raw Extracted Text", full_text[:4000], height=300)
 
         fast_mode = st.checkbox("⚡ Enable Fast Summary Mode (Quick but Less Detailed)", value=True)
 
@@ -148,8 +158,7 @@ if uploaded_file:
                 mime="text/plain"
             )
 
-        # Use correct parameter name (max_words)
-        text_chunks = split_into_chunks(full_text, max_words=250)
+        text_chunks = split_into_chunks(full_text)
 
         question = st.text_input("💬 Ask a question about the original document:")
         if st.button("Get Answer") and question.strip():
