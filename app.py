@@ -58,25 +58,39 @@ def generate_summary(text, fast_mode=False):
     if not chunks:
         return "The document is empty or could not be processed."
 
-    if fast_mode:
-        chunks = chunks[:3]  # Only summarize first 3 chunks for speed
+    # If total text is short, don't trim even in fast mode
+    if fast_mode and len(chunks) > 4:
+        chunks = chunks[:4]  # Limit to first 4 chunks in fast mode
 
     summaries = []
     for i, chunk in enumerate(chunks):
         try:
             with st.spinner(f"Summarizing part {i + 1} of {len(chunks)}..."):
-                result = summarizer(chunk, max_length=150, min_length=80, do_sample=False)
+                result = summarizer(
+                    chunk,
+                    max_length=200,  # Slightly increased for richer content
+                    min_length=100,
+                    do_sample=False
+                )
                 summaries.append(result[0]['summary_text'])
         except Exception:
             summaries.append("")
 
     combined = " ".join(summaries).strip()
-    if not combined:
-        return "Could not generate summary from document content."
+
+    # If the total length is already enough, skip second summarization
+    if len(combined.split()) < 300:
+        return combined
 
     try:
-        final = summarizer(combined, max_length=180, min_length=100, do_sample=False)
-        return final[0]['summary_text']
+        with st.spinner("🔄 Refining final summary..."):
+            final = summarizer(
+                combined,
+                max_length=250,
+                min_length=150,
+                do_sample=False
+            )
+            return final[0]['summary_text']
     except Exception:
         return combined
 
