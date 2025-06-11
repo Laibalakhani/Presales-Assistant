@@ -9,14 +9,14 @@ from transformers import pipeline
 # Configure the Streamlit page
 st.set_page_config(page_title="Pre-Sales Assistant", layout="centered")
 
-# Load summarizer model only once
+# Load the summarization model once
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
     return pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
 
 summarizer = load_summarizer()
 
-# Extract text from various supported file types
+# Extract text from supported files
 def extract_text(file):
     if file.type == "application/pdf":
         doc = fitz.open(stream=file.read(), filetype="pdf")
@@ -36,7 +36,7 @@ def extract_text(file):
 
     return ""
 
-# Split text into reasonably sized chunks
+# Split text for summarization
 def split_into_chunks(text, max_len=1200):
     chunks = []
     start = 0
@@ -52,21 +52,17 @@ def split_into_chunks(text, max_len=1200):
         start = end
     return chunks
 
-# Generate a summary with optional fast mode
-def generate_summary(text, fast_mode=False):
+# Generate summary of full document
+def generate_summary(text):
     chunks = split_into_chunks(text)
     if not chunks:
         return "The document is empty or could not be processed."
 
-    if fast_mode:
-        chunks = chunks[:3]  # Only summarize first 3 chunks for speed
-
     summaries = []
-    for i, chunk in enumerate(chunks):
+    for chunk in chunks:
         try:
-            with st.spinner(f"Summarizing part {i + 1} of {len(chunks)}..."):
-                result = summarizer(chunk, max_length=150, min_length=80, do_sample=False)
-                summaries.append(result[0]['summary_text'])
+            result = summarizer(chunk, max_length=150, min_length=80, do_sample=False)
+            summaries.append(result[0]['summary_text'])
         except Exception:
             summaries.append("")
 
@@ -80,7 +76,7 @@ def generate_summary(text, fast_mode=False):
     except Exception:
         return combined
 
-# Simple keyword-based QA using original text chunks
+# Simple keyword-based question-answering
 def find_answer(question, text_chunks):
     question_words = set(re.findall(r'\w+', question.lower()))
     best_chunk = None
@@ -95,7 +91,7 @@ def find_answer(question, text_chunks):
 
     return best_chunk or "Sorry, I couldn't find the answer in the document."
 
-# UI layout starts here
+# UI starts here
 st.title("🤖 Pre-Sales Assistant")
 
 uploaded_file = st.file_uploader("📄 Upload a document (PDF, DOCX, XLSX)", type=['pdf', 'docx', 'xls', 'xlsx'])
@@ -106,28 +102,25 @@ if uploaded_file:
     if len(full_text.strip()) < 50:
         st.warning("⚠️ The document appears too short or empty to summarize.")
     else:
-        fast_mode = st.checkbox("⚡ Enable Fast Summary Mode (Quick but Less Detailed)", value=True)
+        with st.spinner("⏳ Summarizing the document, please wait..."):
+            summary = generate_summary(full_text)
 
-        if st.button("Generate Summary"):
-            with st.spinner("⏳ Summarizing the document, please wait..."):
-                summary = generate_summary(full_text, fast_mode)
+        st.subheader("📝 Document Summary")
+        st.write(summary)
 
-            st.subheader("📝 Document Summary")
-            st.write(summary)
-
-            st.download_button(
-                label="📥 Download Summary",
-                data=summary,
-                file_name="document_summary.txt",
-                mime="text/plain"
-            )
+        st.download_button(
+            label="📥 Download Summary",
+            data=summary,
+            file_name="document_summary.txt",
+            mime="text/plain"
+        )
 
         text_chunks = split_into_chunks(full_text, max_len=1200)
 
-        question = st.text_input("💬 Ask a question about the original document:")
+        question = st.text_input("💬 Ask a question about the document:")
         if st.button("Get Answer") and question.strip():
             answer = find_answer(question, text_chunks)
             st.subheader("🧠 Answer")
             st.write(answer)
 else:
-    st.info("📁 Please upload a document to begin.")
+    st.info("📁 Please upload a document to begin.") update pls
