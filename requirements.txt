@@ -2,3 +2,4 @@ streamlit
 PyMuPDF
 python-docx
 pandas
+transformers
