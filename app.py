@@ -16,7 +16,11 @@ def load_summarizer():
 
 summarizer = load_summarizer()
 
-# Extract text from various supported file types
+# Clean spammy or irrelevant web text
+def clean_text(text):
+    return re.sub(r'https?://\S+|www\.\S+|gallery\.com|iReport\.com', '', text)
+
+# Extract text from supported file types
 def extract_text(file):
     if file.type == "application/pdf":
         doc = fitz.open(stream=file.read(), filetype="pdf")
@@ -36,7 +40,7 @@ def extract_text(file):
 
     return ""
 
-# Split text into reasonably sized chunks
+# Split text into chunks of ~250 words
 def split_into_chunks(text, max_words=250):
     paragraphs = text.split("\n\n")
     chunks = []
@@ -58,15 +62,14 @@ def split_into_chunks(text, max_words=250):
 
     return chunks
 
-# Generate a summary with optional fast mode
+# Summarization pipeline
 def generate_summary(text, fast_mode=False):
     chunks = split_into_chunks(text)
     if not chunks:
         return "The document is empty or could not be processed."
 
-    # If total text is short, don't trim even in fast mode
     if fast_mode and len(chunks) > 4:
-        chunks = chunks[:4]  # Limit to first 4 chunks in fast mode
+        chunks = chunks[:4]
 
     summaries = []
     for i, chunk in enumerate(chunks):
@@ -74,7 +77,7 @@ def generate_summary(text, fast_mode=False):
             with st.spinner(f"Summarizing part {i + 1} of {len(chunks)}..."):
                 result = summarizer(
                     chunk,
-                    max_length=200,  # Slightly increased for richer content
+                    max_length=200,
                     min_length=100,
                     do_sample=False
                 )
@@ -84,7 +87,6 @@ def generate_summary(text, fast_mode=False):
 
     combined = " ".join(summaries).strip()
 
-    # If the total length is already enough, skip second summarization
     if len(combined.split()) < 300:
         return combined
 
@@ -100,7 +102,7 @@ def generate_summary(text, fast_mode=False):
     except Exception:
         return combined
 
-# Simple keyword-based QA using original text chunks
+# Question-answering helper
 def find_answer(question, text_chunks):
     question_words = set(re.findall(r'\w+', question.lower()))
     best_chunk = None
@@ -115,17 +117,21 @@ def find_answer(question, text_chunks):
 
     return best_chunk or "Sorry, I couldn't find the answer in the document."
 
-# UI layout starts here
+# App UI
 st.title("🤖 Pre-Sales Assistant")
 
 uploaded_file = st.file_uploader("📄 Upload a document (PDF, DOCX, XLSX)", type=['pdf', 'docx', 'xls', 'xlsx'])
 
 if uploaded_file:
-    full_text = extract_text(uploaded_file)
+    raw_text = extract_text(uploaded_file)
+    full_text = clean_text(raw_text)
 
     if len(full_text.strip()) < 50:
         st.warning("⚠️ The document appears too short or empty to summarize.")
     else:
+        with st.expander("🔍 Preview Extracted Text"):
+            st.write(full_text[:2000] + "..." if len(full_text) > 2000 else full_text)
+
         fast_mode = st.checkbox("⚡ Enable Fast Summary Mode (Quick but Less Detailed)", value=True)
 
         if st.button("Generate Summary"):
@@ -142,6 +148,7 @@ if uploaded_file:
                 mime="text/plain"
             )
 
+        # Use correct parameter name (max_words)
         text_chunks = split_into_chunks(full_text, max_words=250)
 
         question = st.text_input("💬 Ask a question about the original document:")
