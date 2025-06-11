@@ -1,8 +1,6 @@
 streamlit
 transformers
 torch
-pdfplumber
+PyMuPDF
 python-docx
 pandas
-scikit-learn
-numpy
