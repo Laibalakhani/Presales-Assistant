@@ -12,7 +12,7 @@ st.set_page_config(page_title="Pre-Sales Assistant", layout="centered")
 # Load summarizer model only once
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
-    return pipeline("summarization", model="google/pegasus-xsum")
+    return pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
 
 summarizer = load_summarizer()
 
