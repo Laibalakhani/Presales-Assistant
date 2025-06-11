@@ -37,19 +37,25 @@ def extract_text(file):
     return ""
 
 # Split text into reasonably sized chunks
-def split_into_chunks(text, max_len=1200):
+def split_into_chunks(text, max_words=250):
+    paragraphs = text.split("\n\n")
     chunks = []
-    start = 0
-    while start < len(text):
-        end = start + max_len
-        snippet = text[start:end]
-        last_period = snippet.rfind('.')
-        if last_period != -1:
-            end = start + last_period + 1
-        chunk = text[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        start = end
+    current_chunk = []
+
+    for para in paragraphs:
+        words = para.strip().split()
+        if not words:
+            continue
+
+        if sum(len(p.split()) for p in current_chunk) + len(words) <= max_words:
+            current_chunk.append(para.strip())
+        else:
+            chunks.append(" ".join(current_chunk).strip())
+            current_chunk = [para.strip()]
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk).strip())
+
     return chunks
 
 # Generate a summary with optional fast mode
