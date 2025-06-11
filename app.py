@@ -1,3 +1,4 @@
+import streamlit as st
 import fitz  # PyMuPDF
 import docx
 import pandas as pd
