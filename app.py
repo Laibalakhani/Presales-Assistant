@@ -142,7 +142,7 @@ if uploaded_file:
                 mime="text/plain"
             )
 
-        text_chunks = split_into_chunks(full_text, max_len=1200)
+        text_chunks = split_into_chunks(full_text, max_words=250)
 
         question = st.text_input("💬 Ask a question about the original document:")
         if st.button("Get Answer") and question.strip():
